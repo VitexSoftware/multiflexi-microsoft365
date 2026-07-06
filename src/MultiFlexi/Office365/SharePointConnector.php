@@ -44,6 +44,13 @@ class SharePointConnector
      */
     private ?array $tokenProbe = null;
 
+    /**
+     * Memoized client secret expiry lookup result — one attempt per instance is enough.
+     *
+     * @var null|array<string, mixed>
+     */
+    private ?array $secretExpiryProbe = null;
+
     public function __construct(
         private readonly string $tenant,
         private readonly string $site,
@@ -187,12 +194,15 @@ class SharePointConnector
             }
         }
 
-        // 2) Phase two — real REST call through php-spo, exactly like the uploader.
-        $credentials = $this->credentials();
-        $ctx = (new \Office365\SharePoint\ClientContext($this->siteUrl()))->withCredentials($credentials);
+        // 2) Phase two — real REST call through php-spo, using the same
+        // context real data operations use (sharePointContext()), so the
+        // check reflects reality instead of a separate, possibly different,
+        // auth path.
+        $ctx = $this->sharePointContext();
+        $resetAuth = $this->resetAuthCallback($ctx);
 
         try {
-            self::withSharePointRetry($ctx, $credentials, static function ($ctx): void {
+            self::withSharePointRetry($ctx, $resetAuth, static function ($ctx): void {
                 $web = $ctx->getWeb();
                 $ctx->load($web);
                 $ctx->executeQuery();
@@ -206,7 +216,7 @@ class SharePointConnector
                 $tokenHttp,
                 200,
                 sprintf(_('SharePoint reachable at %s (auth flow: %s)'), $this->siteUrl(), $flow),
-                ['site' => $this->siteUrl(), 'flow' => $flow],
+                $this->withExpiryDetails(['site' => $this->siteUrl(), 'flow' => $flow]),
             );
         } catch (\Office365\Runtime\Http\RequestException $exc) {
             $restHttp = (int) $exc->getCode();
@@ -219,7 +229,7 @@ class SharePointConnector
                 $tokenHttp,
                 $restHttp,
                 $this->describeRestFailure($exc),
-                ['site' => $this->siteUrl(), 'flow' => $flow, 'rest_http' => $restHttp],
+                $this->withExpiryDetails(['site' => $this->siteUrl(), 'flow' => $flow, 'rest_http' => $restHttp]),
             );
         } catch (\Throwable $exc) {
             return new ProbeResult(
@@ -236,49 +246,86 @@ class SharePointConnector
     }
 
     /**
-     * php-spo credential object (user credential preferred when provided).
-     *
-     * @return \Office365\Runtime\Auth\ClientCredential|\Office365\Runtime\Auth\UserCredentials
+     * php-spo credential object for the legacy user-credential flow only.
+     * Not used for the client-id/secret case - see sharePointContext().
      */
-    public function credentials()
+    public function credentials(): \Office365\Runtime\Auth\UserCredentials
     {
-        if ($this->hasUserCredential()) {
-            return new \Office365\Runtime\Auth\UserCredentials($this->username, $this->password);
-        }
-
-        return new \Office365\Runtime\Auth\ClientCredential($this->clientId, $this->clientSecret);
+        return new \Office365\Runtime\Auth\UserCredentials($this->username, $this->password);
     }
 
     /**
      * Build an authenticated php-spo ClientContext for real data operations.
+     *
+     * Client-id/secret credentials authenticate via the modern Entra ID v2
+     * app-only client_credentials flow (EntraIdAppOnlyAuthenticationContext),
+     * not the legacy Azure ACS ClientCredential/withCredentials() SDK path -
+     * Microsoft fully retired ACS for all tenants on 2026-04-02, so that path
+     * no longer works regardless of credential correctness (confirmed: ACS
+     * still issues a syntactically valid token, but SharePoint Online rejects
+     * it on the real REST call). The user-credential flow is unaffected and
+     * unchanged.
      */
     public function sharePointContext(): \Office365\SharePoint\ClientContext
     {
-        return (new \Office365\SharePoint\ClientContext($this->siteUrl()))->withCredentials($this->credentials());
+        if ($this->hasUserCredential()) {
+            return (new \Office365\SharePoint\ClientContext($this->siteUrl()))->withCredentials($this->credentials());
+        }
+
+        $authCtx = new EntraIdAppOnlyAuthenticationContext(
+            $this->tenant,
+            $this->clientId,
+            $this->clientSecret,
+            'https://'.$this->spHost().'/.default',
+        );
+
+        return new \Office365\SharePoint\ClientContext($this->siteUrl(), $authCtx);
     }
 
     /**
-     * Run a SharePoint ClientContext operation, retrying once if a transient
-     * Microsoft ACS failure leaves the SDK's cached auth token broken.
+     * Callback that discards whatever cached auth state caused a failure on
+     * $ctx, forcing a fresh attempt on the next request - for use with
+     * withSharePointRetry(). Matches how $ctx was built by sharePointContext().
+     */
+    public function resetAuthCallback(\Office365\SharePoint\ClientContext $ctx): \Closure
+    {
+        if ($this->hasUserCredential()) {
+            $credentials = $this->credentials();
+
+            return static function () use ($ctx, $credentials): void {
+                $ctx->withCredentials($credentials);
+            };
+        }
+
+        return static function () use ($ctx): void {
+            $ctx->getAuthenticationContext()->forceRefresh();
+        };
+    }
+
+    /**
+     * Run a SharePoint ClientContext operation, retrying once on a transient
+     * auth failure.
      *
-     * \Office365\Runtime\Auth\ACSTokenProvider hands the decoded response body
-     * straight to AuthenticationContext as the access token without checking the
-     * HTTP status; a transient ACS hiccup therefore caches an error body as the
-     * "token" and every later request on the same context keeps resending it.
-     * Calling ClientContext::withCredentials() again installs a fresh
-     * AuthenticationContext (token reset to null), forcing a brand new token
-     * request on the next call, while $ctx and any object built from it keep
-     * working unchanged.
+     * $resetAuth is called before the retry to discard whatever cached
+     * token/credential state caused the failure, forcing a fresh one on the
+     * next attempt - see resetAuthCallback(). This matters because, at least
+     * for the legacy ACS flow this replaces, a plain resend of the same
+     * request does *not* help: \Office365\Runtime\Auth\ACSTokenProvider hands
+     * the decoded response body straight to AuthenticationContext as the
+     * access token without checking the HTTP status, so a transient hiccup
+     * caches a broken "token" that a bare retry would just resubmit unchanged.
      *
-     * @param \Office365\SharePoint\ClientContext                                              $ctx         reset in place on retry
-     * @param \Office365\Runtime\Auth\ClientCredential|\Office365\Runtime\Auth\UserCredentials $credentials reinstalled on $ctx before retrying
-     * @param callable                                                                         $operation   receives $ctx, performs the call(s) and returns the result
+     * @param \Office365\SharePoint\ClientContext $ctx          context the operation acts through
+     * @param callable                            $resetAuth    called before each retry to force a fresh auth attempt - see resetAuthCallback()
+     * @param callable                            $operation    receives $ctx, performs the call(s) and returns the result
+     * @param int                                  $maxAttempts  total attempts including the first, before giving up
+     * @param int                                  $delaySeconds seconds to wait before a retry
      *
      * @return mixed whatever $operation returned
      */
     public static function withSharePointRetry(
         \Office365\SharePoint\ClientContext $ctx,
-        $credentials,
+        callable $resetAuth,
         callable $operation,
         int $maxAttempts = 2,
         int $delaySeconds = 2,
@@ -292,7 +339,7 @@ class SharePointConnector
                 }
 
                 sleep($delaySeconds);
-                $ctx->withCredentials($credentials);
+                $resetAuth();
             }
         }
     }
@@ -354,6 +401,126 @@ class SharePointConnector
     }
 
     /**
+     * Merge token/secret expiry information (when known) into a details array,
+     * for the client-credential flow. Best-effort: secret expiry requires the
+     * app to additionally hold the Graph "Application.Read.All" application
+     * permission, which most SharePoint-only app registrations will not have
+     * - that is reported as "unknown", not treated as an error.
+     *
+     * @param array<string, scalar> $details
+     *
+     * @return array<string, scalar>
+     */
+    private function withExpiryDetails(array $details): array
+    {
+        if (!$this->hasClientCredential()) {
+            return $details;
+        }
+
+        $tokenProbe = $this->probeToken();
+
+        if ($tokenProbe['ok'] && ($tokenProbe['flow'] ?? '') === 'v2' && !empty($tokenProbe['expires_at'])) {
+            $details['token_expires_at'] = date('c', (int) $tokenProbe['expires_at']);
+        }
+
+        $secretProbe = $this->probeSecretExpiry();
+
+        if ($secretProbe['ok']) {
+            $details['secret_latest_expiry'] = date('c', (int) $secretProbe['expires_at']);
+        } else {
+            $details['secret_expiry_unknown'] = (string) $secretProbe['error'];
+        }
+
+        return $details;
+    }
+
+    /**
+     * Best-effort lookup of the Entra ID app registration's client secret
+     * expiry via Microsoft Graph (GET /applications?$filter=appId eq '...').
+     *
+     * Requires a Graph token AND the app to hold the Graph
+     * "Application.Read.All" application permission - a separate grant from
+     * whatever SharePoint/Sites.Selected permission lets it talk to
+     * SharePoint itself, so failure here is expected for most app
+     * registrations and is reported as "unknown", not as an error state.
+     * When an app has multiple secrets on record, the *latest* expiry among
+     * them is reported (at least one remains valid until then) - this cannot
+     * identify which specific secret is the one actually configured here.
+     *
+     * @return array<string, mixed> ['ok'=>bool, 'expires_at'=>?int, 'display_name'=>?string, 'error'=>string]
+     */
+    private function probeSecretExpiry(): array
+    {
+        if ($this->secretExpiryProbe !== null) {
+            return $this->secretExpiryProbe;
+        }
+
+        if (!$this->hasClientCredential()) {
+            return $this->secretExpiryProbe = ['ok' => false, 'expires_at' => null, 'display_name' => null, 'error' => _('no client credential configured')];
+        }
+
+        $authorityTenant = str_contains($this->tenant, '.') ? $this->tenant : $this->tenant.'.onmicrosoft.com';
+        [$body, $http] = self::httpPostForm(
+            'https://login.microsoftonline.com/'.$authorityTenant.'/oauth2/v2.0/token',
+            [
+                'grant_type' => 'client_credentials',
+                'client_id' => $this->clientId,
+                'client_secret' => $this->clientSecret,
+                'scope' => 'https://graph.microsoft.com/.default',
+            ],
+        );
+        $decoded = json_decode($body, true);
+
+        if ($http !== 200 || !\is_array($decoded) || !isset($decoded['access_token'])) {
+            return $this->secretExpiryProbe = [
+                'ok' => false,
+                'expires_at' => null,
+                'display_name' => null,
+                'error' => _('no Microsoft Graph token (app likely lacks a Graph permission grant)'),
+            ];
+        }
+
+        $ch = curl_init('https://graph.microsoft.com/v1.0/applications?$filter='.rawurlencode("appId eq '{$this->clientId}'").'&$select=displayName,passwordCredentials');
+        curl_setopt_array($ch, [
+            \CURLOPT_HTTPHEADER => ['Authorization: Bearer '.$decoded['access_token']],
+            \CURLOPT_RETURNTRANSFER => true,
+            \CURLOPT_TIMEOUT => 10,
+        ]);
+        $graphBody = curl_exec($ch);
+        $graphHttp = (int) curl_getinfo($ch, \CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $graphDecoded = \is_string($graphBody) ? json_decode($graphBody, true) : null;
+        $app = \is_array($graphDecoded['value'][0] ?? null) ? $graphDecoded['value'][0] : null;
+
+        if ($graphHttp !== 200 || $app === null) {
+            return $this->secretExpiryProbe = [
+                'ok' => false,
+                'expires_at' => null,
+                'display_name' => null,
+                'error' => sprintf(_('Graph application lookup failed (HTTP %d) - requires the "Application.Read.All" Graph application permission'), $graphHttp),
+            ];
+        }
+
+        $latestExpiry = null;
+
+        foreach ((array) ($app['passwordCredentials'] ?? []) as $cred) {
+            $end = isset($cred['endDateTime']) ? strtotime((string) $cred['endDateTime']) : false;
+
+            if ($end !== false && ($latestExpiry === null || $end > $latestExpiry)) {
+                $latestExpiry = $end;
+            }
+        }
+
+        return $this->secretExpiryProbe = [
+            'ok' => $latestExpiry !== null,
+            'expires_at' => $latestExpiry,
+            'display_name' => (string) ($app['displayName'] ?? ''),
+            'error' => $latestExpiry === null ? _('application has no client secrets on record') : '',
+        ];
+    }
+
+    /**
      * Try to obtain an app-only token, preferring Entra ID v2 and falling back to
      * legacy ACS. Memoized per instance. Never returns the token value itself.
      *
@@ -368,7 +535,7 @@ class SharePointConnector
         $v2 = $this->acquireTokenV2();
 
         if ($v2['ok']) {
-            return $this->tokenProbe = ['ok' => true, 'flow' => 'v2', 'http' => $v2['http'], 'error' => ''];
+            return $this->tokenProbe = ['ok' => true, 'flow' => 'v2', 'http' => $v2['http'], 'error' => '', 'expires_at' => $v2['expires_at']];
         }
 
         $acs = $this->acquireTokenAcs();
@@ -414,6 +581,7 @@ class SharePointConnector
             'http' => $http,
             'errno' => $errno,
             'error' => $ok ? '' : (\is_array($decoded) && isset($decoded['error']) ? (string) $decoded['error'] : ($err !== '' ? $err : 'HTTP '.$http)),
+            'expires_at' => $ok ? time() + (int) ($decoded['expires_in'] ?? 3600) : 0,
         ];
     }
 

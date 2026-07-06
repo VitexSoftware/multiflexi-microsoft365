@@ -79,6 +79,16 @@ class Office365 extends \MultiFlexi\Ui\CredentialFormHelperPrototype
             _('Failing phase') => $result->phase,
         ];
 
+        if (isset($result->details['token_expires_at'])) {
+            $rows[_('Access token expires')] = (string) $result->details['token_expires_at'];
+        }
+
+        if (isset($result->details['secret_latest_expiry'])) {
+            $rows[_('Client secret expires (latest on record)')] = (string) $result->details['secret_latest_expiry'];
+        } elseif (isset($result->details['secret_expiry_unknown'])) {
+            $rows[_('Client secret expiry')] = _('unknown').' — '.(string) $result->details['secret_expiry_unknown'];
+        }
+
         foreach ($rows as $label => $item) {
             $details->addItem(new \Ease\Html\DtTag($label, ['class' => 'col-sm-4']));
             $details->addItem(new \Ease\Html\DdTag($item === '' ? '—' : $item, ['class' => 'col-sm-8']));

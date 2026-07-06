@@ -9,5 +9,23 @@ multiflexi-microsoft365 (0.1.0) UNRELEASED; urgency=medium
     client_credentials with legacy ACS fallback; distinguishes transient from
     permanent failures and never logs the client secret.
   * postinst runs multiflexi-cli credential-prototype:sync.
+  * Add EntraIdAppOnlyAuthenticationContext and wire it into
+    SharePointConnector::sharePointContext() so real data operations (not
+    just the diagnostic probe) authenticate via the Entra ID v2 app-only
+    client_credentials flow for the client-id/secret case. Previously
+    sharePointContext()/verify() phase two always built the ClientContext
+    via the legacy Azure ACS ClientCredential/withCredentials() SDK path
+    regardless of what the v2 probe found - meaning even when v2 auth
+    worked, real SharePoint calls still went through the ACS flow Microsoft
+    fully retired on 2026-04-02 and would fail. withSharePointRetry()'s
+    second parameter is generalized from ACS-specific credentials to a
+    plain reset callback (see resetAuthCallback()) accordingly.
+  * Surface expiry information in ProbeResult::$details and the credential
+    UI: the acquired Entra ID v2 token's expiry (reliable), and a
+    best-effort lookup of the app registration's client secret expiry via
+    Microsoft Graph (requires the app to additionally hold the
+    "Application.Read.All" Graph application permission - reported as
+    "unknown" rather than an error when that permission is absent, which is
+    the common case for SharePoint-only app registrations).
 
  -- Vitex <info@vitexsoftware.cz>  Mon, 06 Jul 2026 08:00:00 +0200
