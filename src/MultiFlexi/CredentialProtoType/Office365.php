@@ -36,9 +36,18 @@ class Office365 extends \MultiFlexi\CredentialProtoType implements \MultiFlexi\c
         $tenantField = new \MultiFlexi\ConfigField('OFFICE365_TENANT', 'string', _('Office 365 Tenant'), _('Tenant short name, e.g. contoso for contoso.sharepoint.com'));
         $tenantField->setHint('contoso')->setRequired(true)->setValue('');
 
-        $siteField = new \MultiFlexi\ConfigField('OFFICE365_SITE', 'string', _('SharePoint Site'), _('SharePoint site name (the SITE part of /sites/SITE)'));
-        $siteField->setHint('MySite')->setRequired(true)->setValue('');
-
+        // OFFICE365_SITE/OFFICE365_PATH are deliberately NOT credential
+        // fields: they only make sense for SharePoint access (this
+        // credential type may also back other, non-SharePoint Microsoft 365
+        // services) and are commonly supplied per-runtemplate instead - one
+        // Office365 credential is often shared across many runtemplates,
+        // each pointing at a different SharePoint site/folder. Declaring
+        // them here would give the credential its own (blank) copy that
+        // shadows/overrides the correct per-runtemplate configuration value
+        // once merged into a job's environment - confirmed in production:
+        // jobs failed with "Requied configuration OFFICE365_SITE is not
+        // set" despite the runtemplate's own configuration having the
+        // right value, because the credential's blank field won the merge.
         $clientIdField = new \MultiFlexi\ConfigField('OFFICE365_CLIENTID', 'string', _('Office 365 Client ID'), _('Application (client) ID for app-only access'));
         $clientIdField->setHint('00000000-0000-0000-0000-000000000000')->setValue('');
 
@@ -51,16 +60,11 @@ class Office365 extends \MultiFlexi\CredentialProtoType implements \MultiFlexi\c
         $passwordField = new \MultiFlexi\ConfigField('OFFICE365_PASSWORD', 'password', _('Office 365 Password'), _('Password for the user credential flow (optional)'));
         $passwordField->setHint('your-password')->setSecret(true)->setValue('');
 
-        $pathField = new \MultiFlexi\ConfigField('OFFICE365_PATH', 'string', _('SharePoint Folder Path'), _('Server-relative folder path for data operations (optional)'));
-        $pathField->setHint('Shared Documents/Invoices')->setValue('');
-
         $this->configFieldsInternal->addField($tenantField);
-        $this->configFieldsInternal->addField($siteField);
         $this->configFieldsInternal->addField($clientIdField);
         $this->configFieldsInternal->addField($clientSecretField);
         $this->configFieldsInternal->addField($usernameField);
         $this->configFieldsInternal->addField($passwordField);
-        $this->configFieldsInternal->addField($pathField);
     }
 
     public function load(int $credTypeId)

@@ -53,11 +53,21 @@ class SharePointConnectorTest extends TestCase
 
     public function testMissingRequiredFieldsWhenEmpty(): void
     {
+        // OFFICE365_SITE/OFFICE365_PATH are deliberately not required: they
+        // only matter for SharePoint access, are commonly supplied per
+        // runtemplate rather than stored on the credential, and have no
+        // meaning at all for non-SharePoint Microsoft 365 services.
         $connector = new SharePointConnector('', '');
         $missing = $connector->missingRequiredFields();
         self::assertContains('OFFICE365_TENANT', $missing);
-        self::assertContains('OFFICE365_SITE', $missing);
-        self::assertCount(3, $missing);
+        self::assertNotContains('OFFICE365_SITE', $missing);
+        self::assertCount(2, $missing);
+    }
+
+    public function testMissingRequiredFieldsDoesNotRequireSite(): void
+    {
+        $connector = new SharePointConnector('contoso', '', 'client-id', 'secret');
+        self::assertSame([], $connector->missingRequiredFields());
     }
 
     public function testMissingRequiredFieldsSatisfiedWithClientCredential(): void

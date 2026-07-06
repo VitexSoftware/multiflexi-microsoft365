@@ -27,5 +27,21 @@ multiflexi-microsoft365 (0.1.0) UNRELEASED; urgency=medium
     "Application.Read.All" Graph application permission - reported as
     "unknown" rather than an error when that permission is absent, which is
     the common case for SharePoint-only app registrations).
+  * Fix: stop requiring OFFICE365_SITE on the credential itself. It only
+    makes sense for SharePoint access, is commonly supplied per-runtemplate
+    instead (e.g. one bank-statement runtemplate per SharePoint folder,
+    sharing one Office365 credential across many runtemplates/sites), and
+    has no meaning at all for non-SharePoint Microsoft 365 services this
+    credential type may also back. Previously missingRequiredFields()
+    reported OFFICE365_SITE missing whenever it wasn't set on the
+    credential, which checkAvailability() surfaced as Misconfigured -
+    multiflexi-executor 1.18.0's new Phase 2 credential gate then hard-
+    blocked every job using such a credential (confirmed in production:
+    "blocked by credential Daramis Office365 (misconfigured): Required
+    fields not set: OFFICE365_SITE", even though the credential's
+    tenant/client id/secret were entirely valid). verify() now reports the
+    Phase 1 (token) result alone when no site is configured, rather than
+    treating "no site" as a failure; also removed the field-level
+    setRequired(true) on OFFICE365_SITE for the same reason.
 
  -- Vitex <info@vitexsoftware.cz>  Mon, 06 Jul 2026 08:00:00 +0200

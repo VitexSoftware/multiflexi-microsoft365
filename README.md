@@ -18,12 +18,20 @@ SharePoint communication is built on the [`vgrem/php-spo`](https://github.com/vg
 ## Credential Fields
 
 - **OFFICE365_TENANT** — tenant short name (e.g. `contoso` for `contoso.sharepoint.com`)
-- **OFFICE365_SITE** — SharePoint site name (`/sites/<SITE>`)
 - **OFFICE365_CLIENTID** — application (client) id
 - **OFFICE365_CLSECRET** — client secret value
 - **OFFICE365_USERNAME** — user principal name (optional, user credential flow)
 - **OFFICE365_PASSWORD** — user password (optional, user credential flow)
-- **OFFICE365_PATH** — server-relative folder path (optional)
+
+`OFFICE365_SITE` (SharePoint site name, `/sites/<SITE>`) and `OFFICE365_PATH`
+(server-relative folder path) are deliberately **not** credential fields:
+they only make sense for SharePoint access - this credential type may also
+back other, non-SharePoint Microsoft 365 services - and one credential is
+commonly shared across many runtemplates that each point at a different
+SharePoint site/folder. Supply them as per-runtemplate configuration
+instead. `SharePointConnector`/`checkAvailability()` treat a missing site
+as "not tested" rather than a failure (see [Two-phase connection
+check](#two-phase-connection-check)).
 
 ## Authentication
 

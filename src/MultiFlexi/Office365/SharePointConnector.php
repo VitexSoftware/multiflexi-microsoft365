@@ -109,10 +109,12 @@ class SharePointConnector
             $missing[] = 'OFFICE365_TENANT';
         }
 
-        if ($this->site === '') {
-            $missing[] = 'OFFICE365_SITE';
-        }
-
+        // OFFICE365_SITE/OFFICE365_PATH are deliberately NOT required here:
+        // they only make sense for SharePoint access and are commonly supplied
+        // per-runtemplate (e.g. one bank statement runtemplate per SharePoint
+        // folder) rather than stored on the credential itself, which is shared
+        // across runtemplates/companies and may also back non-SharePoint
+        // Microsoft 365 services where a site has no meaning at all.
         if (!$this->hasClientCredential() && !$this->hasUserCredential()) {
             $missing[] = 'OFFICE365_CLIENTID+OFFICE365_CLSECRET or OFFICE365_USERNAME+OFFICE365_PASSWORD';
         }
@@ -169,6 +171,7 @@ class SharePointConnector
         // flow is validated directly by the phase-two REST call).
         $flow = 'user';
         $tokenHttp = 0;
+        $clientTokenOk = false;
 
         if ($this->hasClientCredential()) {
             $probe = $this->probeToken();
@@ -176,6 +179,7 @@ class SharePointConnector
 
             if ($probe['ok']) {
                 $flow = (string) $probe['flow'];
+                $clientTokenOk = true;
             } elseif (!$this->hasUserCredential()) {
                 return new ProbeResult(
                     false,
@@ -198,6 +202,41 @@ class SharePointConnector
         // context real data operations use (sharePointContext()), so the
         // check reflects reality instead of a separate, possibly different,
         // auth path.
+        //
+        // OFFICE365_SITE is not a required field (see missingRequiredFields())
+        // - it's commonly supplied per-runtemplate rather than stored on the
+        // credential, and has no meaning at all for non-SharePoint Microsoft
+        // 365 services. Without it there's no site to test against: report the
+        // client-credential token result alone (Phase 1 already proves it),
+        // or - for the user-credential flow, which has no independent way to
+        // verify without a REST call - report that verification was skipped
+        // rather than guessing at success.
+        if ($this->site === '') {
+            if ($clientTokenOk) {
+                return new ProbeResult(
+                    true,
+                    ProbeResult::AVAILABLE,
+                    'token',
+                    $flow,
+                    $tokenHttp,
+                    0,
+                    sprintf(_('Authentication succeeded (flow: %s); no OFFICE365_SITE configured, so SharePoint access was not tested'), $flow),
+                    ['flow' => $flow],
+                );
+            }
+
+            return new ProbeResult(
+                false,
+                ProbeResult::TRANSIENT,
+                'token',
+                'user',
+                0,
+                0,
+                _('No OFFICE365_SITE configured; the user-credential flow can only be verified via a real SharePoint call'),
+                [],
+            );
+        }
+
         $ctx = $this->sharePointContext();
         $resetAuth = $this->resetAuthCallback($ctx);
 
