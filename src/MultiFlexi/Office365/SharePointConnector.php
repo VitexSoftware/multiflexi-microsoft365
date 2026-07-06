@@ -16,11 +16,16 @@ declare(strict_types=1);
 namespace MultiFlexi\Office365;
 
 /**
- * Office365/SharePoint connection helper built on the vgrem/php-spo library.
+ * Office365/SharePoint connection helper.
  *
- * Provides a trustworthy, two-phase connection check plus the resilient data-op
- * primitives (context builder, retry wrapper, exception describer) used the same
- * way pohoda-raiffeisenbank's SharePoint uploader uses them.
+ * Provides a trustworthy, two-phase connection check. Phase two goes through
+ * Microsoft Graph for the client-id/secret (app-only) case (verifyViaGraph())
+ * and through classic SharePoint REST via vgrem/php-spo for the legacy
+ * user-credential case (sharePointContext(), unaffected by the ACS
+ * retirement) - see verifyViaGraph()'s docblock for why the two cases need
+ * different transports. This package is diagnostic-only: real SharePoint
+ * upload/list operations live in the consuming applications (e.g.
+ * pohoda-raiffeisenbank), which use the same split.
  *
  * Why two phases: the legacy Azure ACS app-only endpoint can return a
  * syntactically valid token (HTTP 200) that SharePoint Online then rejects
@@ -237,6 +242,14 @@ class SharePointConnector
             );
         }
 
+        // Client-id/secret (app-only) case is verified via Microsoft Graph,
+        // not classic SharePoint REST - see verifyViaGraph() for why. The
+        // user-credential flow is unaffected by the ACS retirement and keeps
+        // using the classic REST check through sharePointContext().
+        if ($this->hasClientCredential()) {
+            return $this->verifyViaGraph($flow, $tokenHttp);
+        }
+
         $ctx = $this->sharePointContext();
         $resetAuth = $this->resetAuthCallback($ctx);
 
@@ -285,6 +298,91 @@ class SharePointConnector
     }
 
     /**
+     * Phase-two check for the client-id/secret (app-only) case, via
+     * Microsoft Graph instead of classic SharePoint REST.
+     *
+     * Switching the token source to Entra ID v2 (EntraIdAppOnlyAuthenticationContext)
+     * fixed authentication against Microsoft Graph, but not against classic
+     * SharePoint REST (`_api/web/...`, what sharePointContext() uses): that
+     * endpoint checks the token's `appidacr` claim and requires `appidacr=2`
+     * (certificate-based app-only auth) - a client_credentials token obtained
+     * with a client *secret* always has `appidacr=1` and is unconditionally
+     * rejected with "Unsupported app only token.", regardless of Sites.Selected
+     * permissions granted. Confirmed by hand: the exact same token/app/site
+     * that gets HTTP 200 from Microsoft Graph gets HTTP 401 from
+     * `_api/web/title`. See
+     * https://techcommunity.microsoft.com/blog/microsoftmissioncriticalblog/avoiding-access-errors-with-sharepoint-app-only-access/4459761
+     * Real data operations (upload/list) live in the consuming applications
+     * (e.g. pohoda-raiffeisenbank), not in this diagnostic-only package -
+     * this check simply needs to reflect the transport those operations
+     * actually use, hence Graph here too.
+     */
+    private function verifyViaGraph(string $flow, int $tokenHttp): ProbeResult
+    {
+        $authCtx = new EntraIdAppOnlyAuthenticationContext(
+            $this->tenant,
+            $this->clientId,
+            $this->clientSecret,
+            'https://graph.microsoft.com/.default',
+        );
+
+        try {
+            $token = $authCtx->getBearerToken();
+        } catch (\Office365\Runtime\Http\RequestException $exc) {
+            $restHttp = (int) $exc->getCode();
+
+            return new ProbeResult(
+                false,
+                self::classify($restHttp, 0),
+                'rest',
+                $flow,
+                $tokenHttp,
+                $restHttp,
+                sprintf(_('Microsoft Graph token request failed (HTTP %d): %s'), $restHttp, $exc->getMessage()),
+                $this->withExpiryDetails(['site' => $this->siteUrl(), 'flow' => $flow]),
+            );
+        }
+
+        $ch = curl_init('https://graph.microsoft.com/v1.0/sites/'.$this->spHost().':/sites/'.$this->site);
+        curl_setopt_array($ch, [
+            \CURLOPT_HTTPHEADER => ['Authorization: Bearer '.$token],
+            \CURLOPT_RETURNTRANSFER => true,
+            \CURLOPT_TIMEOUT => 15,
+        ]);
+        $body = curl_exec($ch);
+        $restHttp = (int) curl_getinfo($ch, \CURLINFO_HTTP_CODE);
+        $errno = curl_errno($ch);
+        curl_close($ch);
+
+        if ($restHttp >= 200 && $restHttp < 300) {
+            return new ProbeResult(
+                true,
+                ProbeResult::AVAILABLE,
+                'rest',
+                $flow,
+                $tokenHttp,
+                $restHttp,
+                sprintf(_('SharePoint reachable via Microsoft Graph at %s (auth flow: %s)'), $this->siteUrl(), $flow),
+                $this->withExpiryDetails(['site' => $this->siteUrl(), 'flow' => $flow]),
+            );
+        }
+
+        $decoded = \is_string($body) ? json_decode($body, true) : null;
+        $errorDetail = \is_array($decoded['error'] ?? null) ? (string) ($decoded['error']['message'] ?? '') : (string) $body;
+
+        return new ProbeResult(
+            false,
+            self::classify($restHttp, $errno),
+            'rest',
+            $flow,
+            $tokenHttp,
+            $restHttp,
+            sprintf(_('Microsoft Graph rejected the request (HTTP %d): %s | %s'), $restHttp, $errorDetail, $this->probeSummary()),
+            $this->withExpiryDetails(['site' => $this->siteUrl(), 'flow' => $flow, 'rest_http' => $restHttp]),
+        );
+    }
+
+    /**
      * php-spo credential object for the legacy user-credential flow only.
      * Not used for the client-id/secret case - see sharePointContext().
      */
@@ -294,16 +392,11 @@ class SharePointConnector
     }
 
     /**
-     * Build an authenticated php-spo ClientContext for real data operations.
-     *
-     * Client-id/secret credentials authenticate via the modern Entra ID v2
-     * app-only client_credentials flow (EntraIdAppOnlyAuthenticationContext),
-     * not the legacy Azure ACS ClientCredential/withCredentials() SDK path -
-     * Microsoft fully retired ACS for all tenants on 2026-04-02, so that path
-     * no longer works regardless of credential correctness (confirmed: ACS
-     * still issues a syntactically valid token, but SharePoint Online rejects
-     * it on the real REST call). The user-credential flow is unaffected and
-     * unchanged.
+     * Build an authenticated php-spo ClientContext for classic SharePoint
+     * REST - used only by the legacy user-credential flow (verify() routes
+     * the client-id/secret case through verifyViaGraph() instead, see its
+     * docblock for why). Kept for that flow and for any future consumer
+     * that specifically needs classic REST with a user credential.
      */
     public function sharePointContext(): \Office365\SharePoint\ClientContext
     {

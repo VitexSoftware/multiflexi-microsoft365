@@ -43,5 +43,24 @@ multiflexi-microsoft365 (0.1.0) UNRELEASED; urgency=medium
     Phase 1 (token) result alone when no site is configured, rather than
     treating "no site" as a failure; also removed the field-level
     setRequired(true) on OFFICE365_SITE for the same reason.
+  * verify()'s phase-two check for the client-id/secret (app-only) case now
+    goes through Microsoft Graph (new verifyViaGraph()) instead of classic
+    SharePoint REST (sharePointContext(), what it used before). Switching
+    only the token source to Entra ID v2 (above) was not enough: classic
+    SharePoint REST checks the token's appidacr claim and requires
+    appidacr=2 (certificate-based app-only auth) - a client_credentials
+    token obtained with a client *secret* always has appidacr=1 and is
+    unconditionally rejected with "Unsupported app only token.", regardless
+    of Sites.Selected permissions granted. Confirmed empirically against a
+    real tenant: the exact same token/app/site that gets HTTP 200 from
+    Microsoft Graph gets HTTP 401 from _api/web/title. See
+    https://techcommunity.microsoft.com/blog/microsoftmissioncriticalblog/avoiding-access-errors-with-sharepoint-app-only-access/4459761
+    This package is diagnostic-only (no file upload/list here), so the fix
+    is just making the check reflect the transport real consumers (e.g.
+    pohoda-raiffeisenbank) actually use. The user-credential flow is
+    unaffected and keeps using classic REST via sharePointContext().
+    EntraIdAppOnlyAuthenticationContext gains getBearerToken() for this
+    (returns the raw token for direct Graph calls, rather than only via the
+    SDK's RequestOptions-based authenticateRequest()).
 
- -- Vitex <info@vitexsoftware.cz>  Mon, 06 Jul 2026 08:00:00 +0200
+ -- Vitex <info@vitexsoftware.cz>  Tue, 07 Jul 2026 10:00:00 +0200
