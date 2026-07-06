@@ -1,0 +1,5 @@
+src/MultiFlexi/CredentialProtoType/Office365.php  usr/share/php/MultiFlexi/CredentialProtoType/
+src/MultiFlexi/Office365/ProbeResult.php          usr/share/php/MultiFlexi/Office365/
+src/MultiFlexi/Office365/SharePointConnector.php  usr/share/php/MultiFlexi/Office365/
+multiflexi-microsoft365.svg                       usr/share/icons/hicolor/scalable/apps/
+debian/eu.multiflexi.multiflexi_microsoft365.metainfo.xml  usr/share/metainfo/

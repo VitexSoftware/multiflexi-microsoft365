@@ -1,0 +1,28 @@
+Source: multiflexi-microsoft365
+Section: web
+Priority: optional
+Maintainer: "Vítězslav Dvořák" <info@vitexsoftware.cz>
+Build-Depends:
+ debhelper-compat (= 13),
+Standards-Version: 4.7.0
+Homepage: https://github.com/VitexSoftware/multiflexi-microsoft365
+Rules-Requires-Root: no
+
+Package: multiflexi-microsoft365
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends}, php-vitexsoftware-multiflexi-core (>= 2.9), php-vgrem-php-spo, multiflexi-cli (>= 2.2.0)
+Description: MultiFlexi Microsoft 365 credential prototype
+ Office 365 / SharePoint credential prototype for MultiFlexi core.
+ Provides the CredentialProtoType class defining tenant, site, client
+ id/secret and user credential fields, plus a two-phase SharePoint
+ availability check built on the php-spo library.
+
+Package: multiflexi-microsoft365-ui
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends}, multiflexi-microsoft365 (= ${binary:Version}), multiflexi-web|multiflexi-web5
+Description: MultiFlexi Microsoft 365 UI components
+ SharePoint connection dialog for the MultiFlexi web interface.
+ Renders the two-phase probe result, the working authentication flow
+ and actionable diagnostics.

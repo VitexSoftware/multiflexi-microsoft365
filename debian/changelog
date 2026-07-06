@@ -1,0 +1,13 @@
+multiflexi-microsoft365 (0.1.0) UNRELEASED; urgency=medium
+
+  * Initial release: Office 365 / SharePoint credential prototype split out of
+    php-vitexsoftware-multiflexi-core into its own add-on package.
+  * Two binary packages: multiflexi-microsoft365 (core) and
+    multiflexi-microsoft365-ui (web interface).
+  * checkAvailability(): two-phase connection check (acquire token, then a real
+    SharePoint REST call) built on vgrem/php-spo; prefers Entra ID v2
+    client_credentials with legacy ACS fallback; distinguishes transient from
+    permanent failures and never logs the client secret.
+  * postinst runs multiflexi-cli credential-prototype:sync.
+
+ -- Vitex <info@vitexsoftware.cz>  Mon, 06 Jul 2026 08:00:00 +0200

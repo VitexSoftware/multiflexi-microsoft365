@@ -1,0 +1,14 @@
+vendor/
+.build/
+.phpunit.cache/
+.phpunit.result.cache
+composer.lock
+debian/debhelper-build-stamp
+debian/*.debhelper
+debian/*.debhelper.log
+debian/*.substvars
+debian/files
+debian/tmp/
+debian/multiflexi-microsoft365/
+debian/multiflexi-microsoft365-ui/
+/nbproject/private/

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="addon">
+  <id>eu.multiflexi.multiflexi_microsoft365</id>
+  <icon type="stock">multiflexi-microsoft365</icon>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <name>MultiFlexi Microsoft 365</name>
+  <summary>Office 365 / SharePoint credential prototype for MultiFlexi</summary>
+  <description>
+    <p>
+      Provides the Office 365 / SharePoint credential prototype for MultiFlexi
+      core, defining tenant, site, client id/secret and user credential fields.
+      It performs a two-phase connection check (acquire a token, then a real
+      SharePoint REST call) built on the php-spo library, preferring the modern
+      Entra ID v2 client_credentials flow with a legacy ACS fallback.
+    </p>
+    <p>
+      Also ships a web UI component that renders the probe result, the working
+      authentication flow and actionable diagnostics.
+    </p>
+  </description>
+  <extends>cz.vitexsoftware.multiflexi</extends>
+  <url type="homepage">https://github.com/VitexSoftware/multiflexi-microsoft365</url>
+  <url type="bugtracker">https://github.com/VitexSoftware/multiflexi-microsoft365/issues</url>
+  <categories>
+    <category>Office</category>
+  </categories>
+  <provides>
+    <library>MultiFlexi/CredentialProtoType/Office365.php</library>
+  </provides>
+  <releases>
+    <release version="0.1.0" date="2026-07-06" type="development" />
+  </releases>
+  <developer id="cz.vitexsoftware">
+    <name>Vítězslav Dvořák</name>
+  </developer>
+  <content_rating type="oars-1.1" />
+</component>

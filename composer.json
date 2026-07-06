@@ -1,0 +1,42 @@
+{
+    "name": "vitexsoftware/multiflexi-microsoft365",
+    "description": "MultiFlexi support for Microsoft 365 / SharePoint integration",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Vítězslav Dvořák",
+            "email": "info@vitexsoftware.cz"
+        }
+    ],
+    "require": {
+        "php": ">=8.1",
+        "vitexsoftware/multiflexi-core": ">=2.9",
+        "vgrem/php-spo": "^3.2.0"
+    },
+    "minimum-stability": "dev",
+    "autoload": {
+        "psr-4": {
+            "MultiFlexi\\CredentialProtoType\\": "src/MultiFlexi/CredentialProtoType/",
+            "MultiFlexi\\Office365\\": "src/MultiFlexi/Office365/",
+            "MultiFlexi\\Ui\\CredentialType\\": "src/MultiFlexi/Ui/CredentialType/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Test\\MultiFlexi\\": "tests/"
+        }
+    },
+    "require-dev": {
+        "phpunit/phpunit": "*",
+        "phpstan/phpstan": "*",
+        "friendsofphp/php-cs-fixer": "^3.92",
+        "ergebnis/composer-normalize": "^2.48",
+        "ergebnis/php-cs-fixer-config": "^6.58"
+    },
+    "config": {
+        "allow-plugins": {
+            "ergebnis/composer-normalize": true
+        }
+    }
+}

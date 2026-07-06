@@ -1,0 +1,120 @@
+{
+  "$schema": "https://raw.githubusercontent.com/VitexSoftware/php-vitexsoftware-multiflexi-core/refs/heads/main/schema/credential-prototype.json",
+  "uuid": "d510bdee-de98-47e8-96b2-0b301af7d96b",
+  "code": "Office365",
+  "name": {
+    "en": "Office 365",
+    "cs": "Office 365"
+  },
+  "description": {
+    "en": "Credential type for integration with Office 365 / SharePoint",
+    "cs": "Typ přihlašovacích údajů pro integraci s Office 365 / SharePoint"
+  },
+  "version": "1.0",
+  "logo": "Office365.svg",
+  "homepage": "https://www.office.com/",
+  "tags": [
+    "Office365",
+    "Microsoft",
+    "SharePoint",
+    "cloud"
+  ],
+  "fields": [
+    {
+      "keyword": "OFFICE365_TENANT",
+      "type": "string",
+      "name": {
+        "en": "Office 365 Tenant",
+        "cs": "Tenant Office 365"
+      },
+      "description": {
+        "en": "Tenant short name, e.g. contoso for contoso.sharepoint.com",
+        "cs": "Krátký název tenanta, např. contoso pro contoso.sharepoint.com"
+      },
+      "hint": "contoso",
+      "required": true
+    },
+    {
+      "keyword": "OFFICE365_SITE",
+      "type": "string",
+      "name": {
+        "en": "SharePoint Site",
+        "cs": "Web SharePoint"
+      },
+      "description": {
+        "en": "SharePoint site name (the SITE part of /sites/SITE)",
+        "cs": "Název webu SharePoint (část SITE v /sites/SITE)"
+      },
+      "hint": "MySite",
+      "required": true
+    },
+    {
+      "keyword": "OFFICE365_CLIENTID",
+      "type": "string",
+      "name": {
+        "en": "Office 365 Client ID",
+        "cs": "Client ID Office 365"
+      },
+      "description": {
+        "en": "Application (client) ID for app-only access",
+        "cs": "ID aplikace (client) pro přístup jménem aplikace"
+      },
+      "hint": "00000000-0000-0000-0000-000000000000",
+      "required": false
+    },
+    {
+      "keyword": "OFFICE365_CLSECRET",
+      "type": "password",
+      "name": {
+        "en": "Office 365 Secret Value",
+        "cs": "Tajný klíč Office 365"
+      },
+      "description": {
+        "en": "Client secret VALUE (Azure Portal, App registrations, Certificates & secrets)",
+        "cs": "HODNOTA tajného klíče (Azure Portal, App registrations, Certificates & secrets)"
+      },
+      "required": false
+    },
+    {
+      "keyword": "OFFICE365_USERNAME",
+      "type": "string",
+      "name": {
+        "en": "Office 365 Username",
+        "cs": "Uživatelské jméno Office 365"
+      },
+      "description": {
+        "en": "User principal name (optional user credential flow)",
+        "cs": "Uživatelské jméno (volitelný přihlašovací režim uživatele)"
+      },
+      "hint": "user@contoso.onmicrosoft.com",
+      "required": false
+    },
+    {
+      "keyword": "OFFICE365_PASSWORD",
+      "type": "password",
+      "name": {
+        "en": "Office 365 Password",
+        "cs": "Heslo Office 365"
+      },
+      "description": {
+        "en": "Password for the user credential flow (optional)",
+        "cs": "Heslo pro přihlašovací režim uživatele (volitelné)"
+      },
+      "required": false
+    },
+    {
+      "keyword": "OFFICE365_PATH",
+      "type": "string",
+      "name": {
+        "en": "SharePoint Folder Path",
+        "cs": "Cesta ke složce SharePoint"
+      },
+      "description": {
+        "en": "Server-relative folder path for data operations (optional)",
+        "cs": "Serverově relativní cesta ke složce pro datové operace (volitelné)"
+      },
+      "hint": "Shared Documents/Invoices",
+      "required": false
+    }
+  ]
+}

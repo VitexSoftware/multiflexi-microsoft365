@@ -1,0 +1,8 @@
+#!/bin/sh
+# postinst script for multiflexi-microsoft365-ui
+set -e
+
+
+#DEBHELPER#
+
+exit 0
