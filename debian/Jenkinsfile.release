@@ -3,7 +3,7 @@
 String[] distributions = [
             'debian:bookworm',
             'debian:trixie',
-//          'debian:forky',    // composer (php-vgrem-php-spo dependency) not installable for forky - no choices
+//             // composer (php-vgrem-php-spo dependency) not installable for forky - no choices
             'ubuntu:jammy',
             'ubuntu:noble',
 //          'ubuntu:resolute', // composer (php-vgrem-php-spo dependency) not installable for resolute - no choices
