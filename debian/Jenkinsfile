@@ -8,7 +8,7 @@ String[] distributions = [
 //			'debian:forky',    // multiflexi-cli uninstallable: php-symfony-dependency-injection has no choices in forky repo
 //			'ubuntu:jammy',    // postinst PHP Fatal error: Symfony/Polyfill/Php80/autoload.php not found (path incompatibility)
 			'ubuntu:noble',
-//			'ubuntu:resolute', // multiflexi-cli uninstallable: multiflexi-sqlite (>= 2.4.1) not available for resolute
+			'ubuntu:resolute',
 ]
 
 String vendor = 'vitexsoftware'
