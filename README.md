@@ -1,6 +1,7 @@
 # multiflexi-microsoft365
 
 ![MultiFlexi Microsoft 365](multiflexi-microsoft365.svg)
+![Packaging: deb](https://img.shields.io/badge/packaging-.deb-red?logo=debian&logoColor=white)
 
 Microsoft 365 / SharePoint integration support for [MultiFlexi](https://multiflexi.eu).
 
