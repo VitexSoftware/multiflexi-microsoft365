@@ -5,7 +5,7 @@
 String[] distributions = [
 			'debian:bookworm', 
 			'debian:trixie', 
-//			'debian:forky',    // multiflexi-cli uninstallable: php-symfony-dependency-injection has no choices in forky repo
+			'debian:forky',
 			'ubuntu:jammy',
 			'ubuntu:noble',
 			'ubuntu:resolute',
